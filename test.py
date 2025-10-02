@@ -3,7 +3,6 @@ from transformers.models.qwen3.modeling_qwen3 import Qwen3Model
 # from transformers import CLIPModel
 from transformers.models.vit import modeling_vit
 # MODEL_NAME = "Qwen/Qwen3-0.6B" 
-# token = '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'
 
 # print(f"正在从 {MODEL_NAME} 加载预训练模型...")
 # model = AutoModelForCausalLM.from_pretrained(
