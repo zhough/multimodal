@@ -4,9 +4,33 @@ from vision_config import VisionConfig
 import torch
 from torch.utils.data import Dataset,DataLoader
 vconfig = VisionConfig()
-from transformers import AutoImageProcessor
+from transformers import AutoImageProcessor,AutoTokenizer
 from PIL import Image
 import torchvision.transforms as transforms
+import json
+import swanlab
+from tools import process_conversation
+from torch.amp import autocast, GradScaler
+import torch.nn as nn
+import torch.optim as optim
+import os
+import torch.distributed as dist
+import torch.multiprocessing as mp
+from torch.utils.data.distributed import DistributedSampler
+import tqdm
+
+
+# 初始化分布式环境
+def setup(rank, world_size):
+    os.environ['MASTER_ADDR'] = 'localhost'
+    os.environ['MASTER_PORT'] = '12355'
+    dist.init_process_group("nccl", rank=rank, world_size=world_size)
+    torch.cuda.set_device(rank)
+# 清理分布式环境
+def cleanup():
+    dist.destroy_process_group()
+
+
 
 class Config():
     def __init__(self):
@@ -15,49 +39,50 @@ class Config():
         self.batch_size = 8
         self.learning_rate = 6e-5
         self.weight_decay = 1e-4
-        self.model_save_path = './output/model.pth'
+        self.step = 0
+        # 分布式训练参数
+        self.world_size = torch.cuda.device_count()
+        self.dist_url = "env://"
+        self.local_rank = -1
+        
+        self.swanlab_project_name = 'multimodal'
+        self.image_dir = './dataset/images/'
+        self.train_json_file = './data_train.json'
+        self.val_json_file = './data_val.json'  
+        self.latest_model = './output/model.pth'
+        self.best_model = './output/best_model.pth'
 
 config = Config()
-image_processor = AutoImageProcessor.from_pretrained(vconfig.model_name)
 
-class VLMDataSet(Dataset):
-    def __init__(self, data, tokenizer):
-        self.data = data  # 格式: [{"image_path": "...", "text": "..."}, ...]
+
+class VLMDataset(Dataset):
+    def __init__(self, json_file_path, tokenizer, processor):
+        self.data = []
+        with open(json_file_path, 'r', encoding='utf-8') as f:
+            self.data = json.load(f)
         self.tokenizer = tokenizer
-        self.image_transform = transforms.Compose([
-            transforms.Resize((224, 224)),  # 根据ViT模型要求调整
-            transforms.ToTensor(),
-        ])
-
+        self.processor = processor
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, idx):
         item = self.data[idx]
-        # 处理图像
-        image = Image.open(item["image_path"]).convert("RGB")
-        pixel_values = image_processor(image, return_tensors="pt")["pixel_values"].squeeze(0)  # [C, H, W]
+        # 调用上面定义的处理函数
+        processed_item = process_conversation(item["conversations"],tokenizer=self.tokenizer)
         
-        # 处理文本（以文本生成为例，label与input_ids一致，padding部分mask）
-        text = item["text"]
-        inputs = self.tokenizer(
-            text,
-            return_tensors="pt",
-            padding="max_length",
-            truncation=True,
-            max_length=512
-        )
-        input_ids = inputs["input_ids"].squeeze(0)
-        attention_mask = inputs["attention_mask"].squeeze(0)
-        labels = input_ids.clone()
-        labels[attention_mask == 0] = -100  # 忽略padding部分的loss
+        # 如果你还需要处理图像，可以在这里加载图像并进行预处理
+        image_id = item["image"]
+        image_name = image_id + '.png'
+        image_path = config.image_dir + image_name
+        image = Image.open(image_path).convert('RGB')
+        processed_image = self.processor(images=image,return_tensors="pt")
+        processed_item["pixel_values"] = processed_image["pixel_values"].squeeze(0) 
         
-        return {
-            "pixel_values": pixel_values,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "labels": labels
-        }
+        return processed_item
+
+# --- DataLoader 示例 ---
+# dataset = ConversationDataset("output_data.json", tokenizer)
+# dataloader = DataLoader(dataset, batch_size=8, shuffle=True, collate_fn=lambda x: x) # 简单的 collate_fn
 
 def init_model(tokenizer,trained_model=None,rank=0):
     lconfig = AutoConfig.from_pretrained(vconfig.llm)
@@ -66,9 +91,10 @@ def init_model(tokenizer,trained_model=None,rank=0):
     if trained_model is None:
         llm = AutoModelForCausalLM.from_pretrained(vconfig.llm)
         model.load_state_dict(
-            llm.state_dict(), # 官方模型的权重在 .model 属性里
+            llm.state_dict(),
             strict=False
         )
+        print('加载官方llm初次训练')
     else:
         # 加载权重文件（指定 map_location 到当前 GPU）
         device = torch.device('cuda', rank)
@@ -86,3 +112,107 @@ def init_model(tokenizer,trained_model=None,rank=0):
         
         # 2.3 加载处理后的权重到模型
         model.load_state_dict(new_state_dict)
+        print('成功加载模型继续训练')
+    if config.world_size > 1:
+        model = torch.nn.parallel.DistributedDataParallel(
+            model, device_ids=[rank], find_unused_parameters=False
+        )
+
+    #criterion = nn.CrossEntropyLoss().to(rank)
+
+    # 优化器：使用 AdamW（带权重衰减的 Adam）
+    optimizer = optim.AdamW(
+        model.parameters(),
+        lr=config.learning_rate,
+        weight_decay=config.weight_decay  # 权重衰减，防止过拟合
+    )
+    # 学习率调度器：随训练步数衰减学习率
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(
+        optimizer,
+        T_max=config.epochs,  # 周期为训练轮数
+        eta_min=1e-6  # 最小学习率
+    )
+    scaler = GradScaler('cuda')
+    return model, optimizer, scheduler ,scaler
+
+def train_epoch(model, tokenizer, dataloader, optimizer, scheduler, scaler, config,rank):
+    model.train()  # 训练模式（启用 dropout 等）
+    total_loss = 0.0
+    for batch in tqdm(dataloader, desc="Training", disable=(rank != 0)):
+        if rank == 0:
+            config.step = config.step + 1
+        input_ids = batch['input_ids'].to(rank)
+        attention_mask = batch['attention_mask'].to(rank)
+        labels = batch['labels'].to(rank)
+        pixel_values = batch['pixel_values'].to(rank)
+
+        optimizer.zero_grad()
+        with autocast('cuda'):
+
+            output = model(
+                input_ids = input_ids,
+                attention_mask = attention_mask,
+                labels = labels,
+                pixel_values = pixel_values,
+            )
+            loss = output.loss
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
+        total_loss += loss.item()
+
+        if config.step % 50 == 0 and rank == 0:
+            swanlab.log({
+                f'step_loss': loss.item(),
+            },step = config.step)
+
+    scheduler.step()
+    avg_loss = total_loss / len(dataloader)
+    return avg_loss
+
+def main(rank,world_size,config):
+    setup(rank, world_size)
+    if rank == 0:
+        swanlab.login(api_key="Nj75sPpgjdzUONcpKxlg6")
+        swanlab.init(
+            project=config.swanlab_project_name,
+            experiment_name="baseline-model",
+            config=vars(config)  # 自动记录所有超参数
+        )
+    tokenizer = AutoTokenizer.from_pretrained(vconfig.llm)
+    image_processor = AutoImageProcessor.from_pretrained(vconfig.model_name)
+
+    train_dataset = VLMDataset(config.train_json_file,tokenizer,image_processor)
+    val_dataset = VLMDataset(config.val_json_file,tokenizer,image_processor)
+    train_sampler = DistributedSampler(train_dataset, shuffle=True)
+    val_sampler = DistributedSampler(val_dataset, shuffle=False)
+    train_dataloader = DataLoader(train_dataset,batch_size=config.batch_size,
+                                  num_workers=4,sampler=train_sampler,pin_memory=True,drop_last=True)
+    val_dataloader = DataLoader(val_dataset,batch_size=config.batch_size,
+                                 num_workers=4,sampler=val_sampler,pin_memory=True)
+    
+    model, optimizer, scheduler, scaler = init_model(tokenizer=tokenizer,rank=rank)
+
+    # 开始训练
+    print(f"开始训练，设备：{config.device}")
+    #best_validate_loss = float('inf')
+    for epoch in range(config.epochs):
+        train_sampler.set_epoch(epoch)
+        train_loss = train_epoch(model,tokenizer,train_dataloader,optimizer,scheduler,scaler,config,rank)
+        if rank == 0:
+            os.makedirs(os.path.dirname(config.latest_model), exist_ok=True)
+            torch.save(model.state_dict(),config.latest_model)
+            print(f'成功保存当前最新轮次模型参数到{config.latest_model}')
+
+            swanlab.log({
+                "train/epoch_avg_loss": train_loss,  # 每轮平均损失
+            }, step=epoch + 1)  # 以 epoch 为步长
+    cleanup()
+
+if __name__ == "__main__":
+    mp.spawn(
+        main,
+        args=(config.world_size, config),
+        nprocs=config.world_size,
+        join=True
+    )
