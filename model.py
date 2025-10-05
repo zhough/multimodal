@@ -33,7 +33,7 @@ class CrossAttention(nn.Module):
 
         #线性映射层
         self.q_proj = nn.Linear(self.l_hidden_size,self.hidden_size)
-        self.k_proj = nn.Linear(self.l_hidden_size,self.hidden_size)
+        self.k_proj = nn.Linear(self.v_hidden_size,self.hidden_size)
         self.v_proj = nn.Linear(self.v_hidden_size,self.hidden_size)
         self.out_proj = nn.Linear(self.hidden_size,self.l_hidden_size)
 
@@ -198,7 +198,6 @@ class VLMModel(Qwen3ForCausalLM):
         super().__init__(config)
         self.model = MyQwen3Model(config)
         self.vit_model = AutoModelForImageClassification.from_pretrained(vconfig.model_name)
-
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
