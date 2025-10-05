@@ -36,10 +36,11 @@ class Config():
     def __init__(self):
         self.epochs = 5
         self.batch_size = 2
-        self.learning_rate = 6e-5
+        self.learning_rate = 1e-5
         self.weight_decay = 1e-4
         self.step = 0
         self.layers_to_unfreeze = 2
+        #config.total_steps = 4000
         # 分布式训练参数
         self.world_size = torch.cuda.device_count()
         self.dist_url = "env://"
@@ -84,7 +85,7 @@ class VLMDataset(Dataset):
 # dataset = ConversationDataset("output_data.json", tokenizer)
 # dataloader = DataLoader(dataset, batch_size=8, shuffle=True, collate_fn=lambda x: x) # 简单的 collate_fn
 
-def init_model(tokenizer,trained_model=None,rank=0):
+def init_model(tokenizer,trained_model=None,rank=0,total_steps=1000):
     lconfig = AutoConfig.from_pretrained(vconfig.llm)
     model = VLMModel(lconfig)
     model.to(rank)
@@ -170,7 +171,7 @@ def init_model(tokenizer,trained_model=None,rank=0):
     # 学习率调度器：随训练步数衰减学习率
     scheduler = optim.lr_scheduler.CosineAnnealingLR(
         optimizer,
-        T_max=config.epochs,  # 周期为训练轮数
+        T_max=total_steps,
         eta_min=1e-6  # 最小学习率
     )
     scaler = GradScaler('cuda')
@@ -200,15 +201,20 @@ def train_epoch(model, tokenizer, dataloader, optimizer, scheduler, scaler, conf
         scaler.scale(loss).backward()
         scaler.step(optimizer)
         scaler.update()
+        scheduler.step()
         total_loss += loss.item()
 
         if config.step % 50 == 0 and rank == 0:
             swanlab.log({
                 f'step_loss': loss.item(),
             },step = config.step)
-
-    scheduler.step()
+        if config.step % 1000 == 0 and rank == 0:
+            model_path = f'./output/step_{config.step}/model.pth'
+            os.makedirs(os.path.dirname(model_path), exist_ok=True)
+            torch.save(model.state_dict(),model_path)
+            print(f'成功保存当前最新模型参数到{model_path}') 
     avg_loss = total_loss / len(dataloader)
+        
     return avg_loss
 
 def main(rank,world_size,config):
@@ -231,8 +237,10 @@ def main(rank,world_size,config):
                                   num_workers=4,sampler=train_sampler,pin_memory=True,drop_last=True)
     val_dataloader = DataLoader(val_dataset,batch_size=config.batch_size,
                                  num_workers=4,sampler=val_sampler,pin_memory=True)
-    
-    model, optimizer, scheduler, scaler = init_model(tokenizer=tokenizer,rank=rank)
+    total_steps = len(train_dataloader)*config.epochs
+    if rank == 0:
+        print(f'总训练步数:{total_steps}')
+    model, optimizer, scheduler, scaler = init_model(tokenizer=tokenizer,rank=rank,total_steps=total_steps)
 
     # 开始训练
     print(f"开始训练")
