@@ -34,7 +34,7 @@ def cleanup():
 
 class Config():
     def __init__(self):
-        self.epochs = 5
+        self.epochs = 1
         self.batch_size = 2
         self.learning_rate = 1e-5
         self.weight_decay = 1e-4
