@@ -209,7 +209,7 @@ def train_epoch(model, tokenizer, dataloader, optimizer, scheduler, scaler, conf
                 f'step_loss': loss.item(),
             },step = config.step)
         if config.step % 1000 == 0 and rank == 0:
-            model_path = f'./output/step_{config.step}/model.pth'
+            model_path = f'./output/steps/model.pth'
             os.makedirs(os.path.dirname(model_path), exist_ok=True)
             torch.save(model.state_dict(),model_path)
             print(f'成功保存当前最新模型参数到{model_path}') 
