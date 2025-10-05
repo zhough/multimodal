@@ -36,7 +36,7 @@ class Config():
     def __init__(self):
         self.epochs = 10
         self.epochs = 5
-        self.batch_size = 8
+        self.batch_size = 4
         self.learning_rate = 6e-5
         self.weight_decay = 1e-4
         self.step = 0
