@@ -47,7 +47,7 @@ class Config():
         self.local_rank = -1
         
         self.swanlab_project_name = 'multimodal'
-        self.image_dir = './dataset/images/'
+        self.image_dir = '/kaggle/working/multimodal/dataset/images'
         self.train_json_file = '/kaggle/working/multimodal/data_train.json'
         self.val_json_file = '/kaggle/working/multimodal/data_val.json'  
         self.latest_model = './output/model.pth'
@@ -123,20 +123,20 @@ def init_model(tokenizer,trained_model=None,rank=0):
     #冻结自注意力层和前馈层
     for name,param in model.model.named_parameters():
         param.requires_grad = False
-        if rank == 0:
-            print('冻结所有llm模块')
+    if rank == 0:
+        print('冻结所有llm模块')
     for layer in model.model.layers:
         cross_attn_module = layer.cross_attn
         for name,param in cross_attn_module.named_parameters():
             param.requires_grad = True
-            if rank == 0:
-                print(f'成功解冻交叉注意力层')
+    if rank == 0:
+        print(f'成功解冻交叉注意力层')
     #解冻最后4层
     for layer in model.model.layers[-config.layers_to_unfreeze:]:
         for name,param in layer.named_parameters():
             param.requires_grad = True
-            if rank == 0:
-                print(f'成功解冻最后 {config.layers_to_unfreeze} 层')
+    if rank == 0:
+        print(f'成功解冻最后 {config.layers_to_unfreeze} 层')
 
     if rank == 0:
         print("\n--- 可训练参数列表 (requires_grad=True) ---")
