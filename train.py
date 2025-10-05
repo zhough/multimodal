@@ -17,7 +17,7 @@ import os
 import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.utils.data.distributed import DistributedSampler
-import tqdm
+from tqdm import tqdm
 
 
 # 初始化分布式环境
@@ -126,7 +126,7 @@ def init_model(tokenizer,trained_model=None,rank=0):
         if rank == 0:
             print('冻结所有llm模块')
     for layer in model.model.layers:
-        cross_attn_module = layer.self_attn
+        cross_attn_module = layer.cross_attn
         for name,param in cross_attn_module.named_parameters():
             param.requires_grad = True
             if rank == 0:
