@@ -34,13 +34,12 @@ def cleanup():
 
 class Config():
     def __init__(self):
-        self.epochs = 10
         self.epochs = 5
-        self.batch_size = 4
+        self.batch_size = 2
         self.learning_rate = 6e-5
         self.weight_decay = 1e-4
         self.step = 0
-        self.layers_to_unfreeze = 4
+        self.layers_to_unfreeze = 2
         # 分布式训练参数
         self.world_size = torch.cuda.device_count()
         self.dist_url = "env://"
