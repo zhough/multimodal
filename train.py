@@ -47,7 +47,7 @@ class Config():
         self.local_rank = -1
         
         self.swanlab_project_name = 'multimodal'
-        self.image_dir = '/kaggle/working/multimodal/dataset/images'
+        self.image_dir = '/kaggle/working/multimodal/dataset/images/'
         self.train_json_file = '/kaggle/working/multimodal/data_train.json'
         self.val_json_file = '/kaggle/working/multimodal/data_val.json'  
         self.latest_model = './output/model.pth'
