@@ -236,7 +236,7 @@ def main(rank,world_size,config):
     model, optimizer, scheduler, scaler = init_model(tokenizer=tokenizer,rank=rank)
 
     # 开始训练
-    print(f"开始训练，设备：{config.device}")
+    print(f"开始训练")
     #best_validate_loss = float('inf')
     for epoch in range(config.epochs):
         train_sampler.set_epoch(epoch)
