@@ -48,8 +48,8 @@ class Config():
         
         self.swanlab_project_name = 'multimodal'
         self.image_dir = './dataset/images/'
-        self.train_json_file = './data_train.json'
-        self.val_json_file = './data_val.json'  
+        self.train_json_file = '/kaggle/working/multimodal/data_train.json'
+        self.val_json_file = '/kaggle/working/multimodal/data_val.json'  
         self.latest_model = './output/model.pth'
         self.best_model = './output/best_model.pth'
 
