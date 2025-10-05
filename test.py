@@ -1,34 +1,34 @@
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers.models.qwen3.modeling_qwen3 import Qwen3Model
-from transformers import CLIPModel
-from transformers.models.vit import modeling_vit
-MODEL_NAME = "Qwen/Qwen3-0.6B" 
+# from transformers import AutoModelForCausalLM, AutoTokenizer
+# from transformers.models.qwen3.modeling_qwen3 import Qwen3Model
+# from transformers import CLIPModel
+# from transformers.models.vit import modeling_vit
+# MODEL_NAME = "Qwen/Qwen3-0.6B" 
 
-print(f"正在从 {MODEL_NAME} 加载预训练模型...")
-model = AutoModelForCausalLM.from_pretrained(
-    MODEL_NAME,
-    dtype="auto",  # 自动选择合适的数据类型（如 bfloat16）
-)
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-print("模型加载成功！")
+# print(f"正在从 {MODEL_NAME} 加载预训练模型...")
+# model = AutoModelForCausalLM.from_pretrained(
+#     MODEL_NAME,
+#     dtype="auto",  # 自动选择合适的数据类型（如 bfloat16）
+# )
+# tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+# print("模型加载成功！")
 
-# --- 2. 打印参数名 ---
+# # --- 2. 打印参数名 ---
 
-print("打印所有可训练参数的名称和形状")
-print("-" * 50)
-# `model.named_parameters()` 返回一个迭代器，每次迭代产生一个 (name, parameter) 元组。
-# `parameter` 是一个 torch.Tensor 对象。
-count = 0
-for name, param in model.named_parameters():
-    # 打印参数名和其形状
-    print(f"名称: {name:<80} | 形状: {param.shape}")
+# print("打印所有可训练参数的名称和形状")
+# print("-" * 50)
+# # `model.named_parameters()` 返回一个迭代器，每次迭代产生一个 (name, parameter) 元组。
+# # `parameter` 是一个 torch.Tensor 对象。
+# count = 0
+# for name, param in model.named_parameters():
+#     # 打印参数名和其形状
+#     print(f"名称: {name:<80} | 形状: {param.shape}")
 
 
-# 1. 导入需要的库
-from transformers import AutoImageProcessor, AutoModelForImageClassification
-from PIL import Image
-import requests
-import torch
+# # 1. 导入需要的库
+# from transformers import AutoImageProcessor, AutoModelForImageClassification
+# from PIL import Image
+# import requests
+# import torch
 
 # # 2. 定义模型名称
 # # 这个名称会告诉 transformers 库去下载对应的权重和配置
@@ -74,3 +74,21 @@ import torch
 # # 这就是你想要的“所有维度”的输出
 # hidden_states = outputs.hidden_states[-1]
 # print(f"Last hidden state: {hidden_states}")r
+
+
+from model import VLMModel
+from transformers import AutoTokenizer,AutoConfig
+from vision_config import VisionConfig
+vconfig = VisionConfig()
+
+config = AutoConfig.from_pretrained(vconfig.llm)    
+
+model = VLMModel(config)
+
+# for name,param in model.named_parameters():
+#          print(f"名称: {name:<80} | 形状: {param.shape}")
+
+
+for layer in model.model.layers:
+    for name,param in layer.named_parameters():
+        print(name)

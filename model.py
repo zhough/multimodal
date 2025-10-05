@@ -216,6 +216,7 @@ class VLMModel(Qwen3ForCausalLM):
         with torch.no_grad():
             v_output = self.vit_model(**pixel_values,output_hidden_states=True)
             v_hidden_states = v_output.hidden_states[-1]
+            
         outputs: BaseModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,

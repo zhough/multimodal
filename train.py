@@ -40,6 +40,7 @@ class Config():
         self.learning_rate = 6e-5
         self.weight_decay = 1e-4
         self.step = 0
+        self.layers_to_unfreeze = 4
         # 分布式训练参数
         self.world_size = torch.cuda.device_count()
         self.dist_url = "env://"
@@ -113,6 +114,47 @@ def init_model(tokenizer,trained_model=None,rank=0):
         # 2.3 加载处理后的权重到模型
         model.load_state_dict(new_state_dict)
         print('成功加载模型继续训练')
+
+    #冻结视觉模块
+    for name, param in model.vit_model.named_parameters():
+        param.requires_grad = False
+        if rank == 0:
+            print(f'成功冻结: {name}')
+    #冻结自注意力层和前馈层
+    for name,param in model.model.named_parameters():
+        param.requires_grad = False
+        if rank == 0:
+            print('冻结所有llm模块')
+    for layer in model.model.layers:
+        cross_attn_module = layer.self_attn
+        for name,param in cross_attn_module.named_parameters():
+            param.requires_grad = True
+            if rank == 0:
+                print(f'成功解冻交叉注意力层')
+    #解冻最后4层
+    for layer in model.model.layers[-config.layers_to_unfreeze:]:
+        for name,param in layer.named_parameters():
+            param.requires_grad = True
+            if rank == 0:
+                print(f'成功解冻最后 {config.layers_to_unfreeze} 层')
+
+    if rank == 0:
+        print("\n--- 可训练参数列表 (requires_grad=True) ---")
+        trainable_params = [name for name, param in model.named_parameters() if param.requires_grad]
+        
+        if not trainable_params:
+            print("警告：没有找到任何可训练的参数！")
+        else:
+            for name in trainable_params:
+                print(name)
+            
+            # 计算并打印可训练参数的总数
+            total_trainable_params = sum(p.numel() for name, p in model.named_parameters() if p.requires_grad)
+            print(f"\n可训练参数总数: {total_trainable_params:,}")
+        print("----------------------------------------")
+            
+
+
     if config.world_size > 1:
         model = torch.nn.parallel.DistributedDataParallel(
             model, device_ids=[rank], find_unused_parameters=False
