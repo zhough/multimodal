@@ -76,19 +76,24 @@
 # print(f"Last hidden state: {hidden_states}")r
 
 
-from model import VLMModel
-from transformers import AutoTokenizer,AutoConfig
-from vision_config import VisionConfig
-vconfig = VisionConfig()
+# from model import VLMModel
+# from transformers import AutoTokenizer,AutoConfig
+# from vision_config import VisionConfig
+# vconfig = VisionConfig()
 
-config = AutoConfig.from_pretrained(vconfig.llm)    
+# config = AutoConfig.from_pretrained(vconfig.llm)    
 
-model = VLMModel(config)
+# model = VLMModel(config)
 
-# for name,param in model.named_parameters():
-#          print(f"名称: {name:<80} | 形状: {param.shape}")
+# # for name,param in model.named_parameters():
+# #          print(f"名称: {name:<80} | 形状: {param.shape}")
 
 
-for layer in model.model.layers:
-    for name,param in layer.named_parameters():
-        print(name)
+# for layer in model.model.layers:
+#     for name,param in layer.named_parameters():
+#         print(name)
+
+import pandas as pd
+
+file = pd.read_csv('results.csv',sep='|')
+print(file.columns)

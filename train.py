@@ -46,9 +46,9 @@ class Config():
         self.dist_url = "env://"
         self.local_rank = -1
         
-        self.swanlab_project_name = 'multimodal'
-        self.image_dir = '/kaggle/working/multimodal/dataset/images/'
-        self.train_json_file = '/kaggle/working/multimodal/data_train.json'
+        self.swanlab_project_name = 'multimodal_v2'
+        self.image_dir = '/kaggle/input/flickr-image-dataset/flickr30k_images/flickr30k_images/'
+        self.train_json_file = '/kaggle/working/multimodal/frickr30k.json'
         self.val_json_file = '/kaggle/working/multimodal/data_val.json'  
         self.latest_model = './output/model.pth'
         self.best_model = './output/best_model.pth'
@@ -73,7 +73,7 @@ class VLMDataset(Dataset):
         
         # 如果你还需要处理图像，可以在这里加载图像并进行预处理
         image_id = item["image"]
-        image_name = image_id + '.png'
+        image_name = image_id
         image_path = config.image_dir + image_name
         image = Image.open(image_path).convert('RGB')
         processed_image = self.processor(images=image,return_tensors="pt")
@@ -132,9 +132,9 @@ def init_model(tokenizer,trained_model=None,rank=0,total_steps=1000):
     if rank == 0:
         print(f'成功解冻交叉注意力层')
     #解冻最后4层
-    for layer in model.model.layers[-config.layers_to_unfreeze:]:
-        for name,param in layer.named_parameters():
-            param.requires_grad = True
+    # for layer in model.model.layers[-config.layers_to_unfreeze:]:
+    #     for name,param in layer.named_parameters():
+    #         param.requires_grad = True
     if rank == 0:
         print(f'成功解冻最后 {config.layers_to_unfreeze} 层')
 
@@ -223,7 +223,7 @@ def main(rank,world_size,config):
         swanlab.login(api_key="Nj75sPpgjdzUONcpKxlg6")
         swanlab.init(
             project=config.swanlab_project_name,
-            experiment_name="baseline-model",
+            experiment_name="train",
             config=vars(config)  # 自动记录所有超参数
         )
     tokenizer = AutoTokenizer.from_pretrained(vconfig.llm)
@@ -235,8 +235,8 @@ def main(rank,world_size,config):
     val_sampler = DistributedSampler(val_dataset, shuffle=False)
     train_dataloader = DataLoader(train_dataset,batch_size=config.batch_size,
                                   num_workers=4,sampler=train_sampler,pin_memory=True,drop_last=True)
-    val_dataloader = DataLoader(val_dataset,batch_size=config.batch_size,
-                                 num_workers=4,sampler=val_sampler,pin_memory=True)
+    # val_dataloader = DataLoader(val_dataset,batch_size=config.batch_size,
+    #                              num_workers=4,sampler=val_sampler,pin_memory=True)
     total_steps = len(train_dataloader)*config.epochs
     if rank == 0:
         print(f'总训练步数:{total_steps}')
@@ -248,14 +248,14 @@ def main(rank,world_size,config):
     for epoch in range(config.epochs):
         train_sampler.set_epoch(epoch)
         train_loss = train_epoch(model,tokenizer,train_dataloader,optimizer,scheduler,scaler,config,rank)
-        if rank == 0:
-            os.makedirs(os.path.dirname(config.latest_model), exist_ok=True)
-            torch.save(model.state_dict(),config.latest_model)
-            print(f'成功保存当前最新轮次模型参数到{config.latest_model}')
+        # if rank == 0:
+        #     os.makedirs(os.path.dirname(config.latest_model), exist_ok=True)
+        #     torch.save(model.state_dict(),config.latest_model)
+        #     print(f'成功保存当前最新轮次模型参数到{config.latest_model}')
 
-            swanlab.log({
-                "train/epoch_avg_loss": train_loss,  # 每轮平均损失
-            }, step=epoch + 1)  # 以 epoch 为步长
+        #     swanlab.log({
+        #         "train/epoch_avg_loss": train_loss,  # 每轮平均损失
+        #     }, step=epoch + 1)  # 以 epoch 为步长
     cleanup()
 
 if __name__ == "__main__":
