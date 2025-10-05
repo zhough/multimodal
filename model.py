@@ -20,6 +20,7 @@ from torch import nn
 from torch.nn import functional as F
 from typing import Optional,Union
 from vision_config import VisionConfig
+import numpy as np
 
 vconfig = VisionConfig()
 class CrossAttention(nn.Module):
@@ -51,8 +52,8 @@ class CrossAttention(nn.Module):
         # q = q.reshape(-1,l_seq_len,self.head_dim)
         # k = k.reshape(-1,v_seq_len,self.head_dim)
         # v = v.reshape(-1,v_seq_len,self.head_dim)
-
-        attn_weight = torch.matmul(q,k.transpose(-1,-2))/torch.sqrt(self.hidden_size)
+        scale_factor = torch.sqrt(torch.tensor(self.hidden_size, dtype=q.dtype, device=q.device))
+        attn_weight = torch.matmul(q,k.transpose(-1,-2))/scale_factor
         attn_weight = F.softmax(attn_weight,dim=-1)
 
         attn_output = torch.matmul(attn_weight,v)
