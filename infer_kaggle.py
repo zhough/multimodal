@@ -10,11 +10,16 @@ llmconfig = AutoConfig.from_pretrained(vconfig.llm)
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 model = VLMModel(llmconfig).to(device)
-state_dict = torch.load('/kaggle/input/vlm/transformers/default/1/model.pth', map_location=device)
+
 
 def main():
     parser = argparse.ArgumentParser(description='多模态推理。')
+    image_path = '/kaggle/working/multimodal/men4.jpg'
+    parser.add_argument('--image',type=str,default=image_path,help='图像路径')
+    parser.add_argument('--model_path',type=str,default='/kaggle/input/vlm/transformers/default/1/model.pth',help='模型路径')
+    args = parser.parse_args()
     # 移除所有权重键的 module. 前缀
+    state_dict = torch.load(args.model_path, map_location=device)
     new_state_dict = {}
     for key, value in state_dict.items():
         # 去掉键开头的 module.（若存在）
@@ -36,9 +41,7 @@ def main():
     text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
     # 2. 准备图像
-    image_path = '/kaggle/working/multimodal/men4.jpg'
-    parser.add_argument('--image',type=str,default=image_path,help='图像路径')
-    args = parser.parse_args()
+
     image = Image.open(args.image).convert('RGB')
 
     # 3. 使用 processor 和 tokenizer 处理输入
