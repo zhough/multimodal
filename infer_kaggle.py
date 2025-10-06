@@ -7,7 +7,7 @@ import torch
 vconfig = VisionConfig()
 llmconfig = AutoConfig.from_pretrained(vconfig.llm)
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-model = VLMModel(llmconfig)
+model = VLMModel(llmconfig).to(device)
 state_dict = torch.load('/kaggle/input/vlm/transformers/default/1/model.pth', map_location=device)
 
 # 移除所有权重键的 module. 前缀
