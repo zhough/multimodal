@@ -26,13 +26,13 @@ tokenizer = AutoTokenizer.from_pretrained(vconfig.llm)
 image_processor = AutoImageProcessor.from_pretrained(vconfig.model_name)
 
 # 1. 准备文本提示
-prompt = "how many cats are there in this picture?"
+prompt = "describe this picture."
 # Qwen 系列通常使用特定的聊天模板，最好用 tokenizer.apply_chat_template
 messages = [{"role": "user", "content": prompt}]
 text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
 # 2. 准备图像
-image = './cat.jpg'
+image = './men.jpg'
 image = Image.open(image).convert('RGB')
 
 # 3. 使用 processor 和 tokenizer 处理输入
@@ -40,11 +40,11 @@ image = Image.open(image).convert('RGB')
 image_inputs = image_processor(images=image, return_tensors="pt").to(device)
 # 处理文本
 text_inputs = tokenizer(text, return_tensors="pt").to(device)
-
+#pixel_values = torch.zeros_like(image_inputs['pixel_values'],device=device)
 # 4. 合并成一个字典，这将作为 generate() 的输入
 # 关键：确保键名（如 'pixel_values'）与你 forward 方法中接收的参数名一致
 inputs = {**text_inputs, **image_inputs}
-
+#inputs = {**text_inputs,'pixel_values':pixel_values}
 with torch.no_grad():
     outputs = model.generate(
         **inputs,
