@@ -14,8 +14,7 @@ model = VLMModel(llmconfig).to(device)
 
 def main():
     parser = argparse.ArgumentParser(description='多模态推理。')
-    image_path = '/kaggle/working/multimodal/men4.jpg'
-    parser.add_argument('--image',type=str,default=image_path,help='图像路径')
+    parser.add_argument('--image',type=str,default='/kaggle/working/multimodal/men4.jpg',help='图像路径')
     parser.add_argument('--model_path',type=str,default='/kaggle/input/vlm/transformers/default/1/model.pth',help='模型路径')
     args = parser.parse_args()
     # 移除所有权重键的 module. 前缀
@@ -69,3 +68,6 @@ def main():
 
     print("生成的回答:")
     print(generated_text)
+
+if __name__ == "__main__":
+    main()
